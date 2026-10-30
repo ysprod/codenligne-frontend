@@ -14,6 +14,7 @@ interface Question {
   correctOptionIndexes?: number[];
   explanation: string;
   difficulty: string;
+  illustration?: string;
 }
 
 export default function AdminQuestionsPage() {
@@ -29,6 +30,8 @@ export default function AdminQuestionsPage() {
   const [correctOptionIndexes, setCorrectOptionIndexes] = useState<number[]>([]);
   const [explanation, setExplanation] = useState('');
   const [difficulty, setDifficulty] = useState('MEDIUM');
+  const [illustrationUrl, setIllustrationUrl] = useState('');
+  const [isUploading, setIsUploading] = useState(false);
 
   // ─── État pour la création manuelle du QCM ───
   const [quizTitle, setQuizTitle] = useState('');
@@ -49,11 +52,35 @@ export default function AdminQuestionsPage() {
     queryFn: async () => (await api.get<Question[]>('/quizzes/questions')).data,
   });
 
+  // ─── Upload d'image ───
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    setIsUploading(true);
+    const formData = new FormData();
+    formData.append('file', file);
+
+    try {
+      const res = await api.post<{ url: string }>('/uploads/image', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' },
+      });
+      // On construit l'URL complète pour l'affichage dans l'admin
+      const baseUrl = process.env.NEXT_PUBLIC_API_URL?.replace('/api/v1', '') || '';
+      setIllustrationUrl(`${baseUrl}${res.data.url}`);
+    } catch (error) {
+      alert("Erreur lors de l'upload de l'image");
+    } finally {
+      setIsUploading(false);
+    }
+  };
+
   // ─── Mutations ───
   const saveQuestionMutation = useMutation({
     mutationFn: async () => {
       const payload = {
         statement, type, options, explanation, difficulty,
+        illustration: illustrationUrl || undefined, // 👈 Ajout de l'image
         correctOptionIndex: type === 'SINGLE' ? correctOptionIndex : undefined,
         correctOptionIndexes: type === 'MULTIPLE' ? correctOptionIndexes : [],
       };
@@ -107,7 +134,7 @@ export default function AdminQuestionsPage() {
   // ─── Helpers ───
   const resetForm = () => {
     setEditingId(null);
-    setStatement(''); setOptions(['', '']); setExplanation(''); setCorrectOptionIndex(0); setCorrectOptionIndexes([]); setDifficulty('MEDIUM');
+    setStatement(''); setOptions(['', '']); setExplanation(''); setCorrectOptionIndex(0); setCorrectOptionIndexes([]); setDifficulty('MEDIUM'); setIllustrationUrl('');
   };
 
   const startEdit = (q: Question) => {
@@ -119,6 +146,7 @@ export default function AdminQuestionsPage() {
     setCorrectOptionIndexes(q.correctOptionIndexes ?? []);
     setExplanation(q.explanation);
     setDifficulty(q.difficulty);
+    setIllustrationUrl(q.illustration || ''); // 👈 Charger l'image existante
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -147,22 +175,13 @@ export default function AdminQuestionsPage() {
 
       {/* Onglets */}
       <div className="flex border-b border-border">
-        <button
-          onClick={() => setActiveTab('bank')}
-          className={`py-3 px-6 font-medium border-b-2 transition-colors ${activeTab === 'bank' ? 'border-primary text-primary' : 'border-transparent text-ink-soft hover:text-ink'}`}
-        >
+        <button onClick={() => setActiveTab('bank')} className={`py-3 px-6 font-medium border-b-2 transition-colors ${activeTab === 'bank' ? 'border-primary text-primary' : 'border-transparent text-ink-soft hover:text-ink'}`}>
           Banque de questions
         </button>
-        <button
-          onClick={() => setActiveTab('create')}
-          className={`py-3 px-6 font-medium border-b-2 transition-colors ${activeTab === 'create' ? 'border-primary text-primary' : 'border-transparent text-ink-soft hover:text-ink'}`}
-        >
+        <button onClick={() => setActiveTab('create')} className={`py-3 px-6 font-medium border-b-2 transition-colors ${activeTab === 'create' ? 'border-primary text-primary' : 'border-transparent text-ink-soft hover:text-ink'}`}>
           Créer un QCM (Manuel)
         </button>
-        <button
-          onClick={() => setActiveTab('auto')}
-          className={`py-3 px-6 font-medium border-b-2 transition-colors flex items-center gap-2 ${activeTab === 'auto' ? 'border-primary text-primary' : 'border-transparent text-ink-soft hover:text-ink'}`}
-        >
+        <button onClick={() => setActiveTab('auto')} className={`py-3 px-6 font-medium border-b-2 transition-colors flex items-center gap-2 ${activeTab === 'auto' ? 'border-primary text-primary' : 'border-transparent text-ink-soft hover:text-ink'}`}>
           <Sparkles className="w-4 h-4" /> Génération automatique
         </button>
       </div>
@@ -170,7 +189,6 @@ export default function AdminQuestionsPage() {
       {/* ─── ONGLET 1 : BANQUE DE QUESTIONS ─── */}
       {activeTab === 'bank' && (
         <div className="space-y-8">
-          {/* Formulaire d'ajout/modification */}
           <div className="bg-white rounded-xl border border-border p-6 shadow-sm space-y-4">
             <div className="flex justify-between items-center">
               <h2 className="text-lg font-semibold text-ink">
@@ -229,17 +247,26 @@ export default function AdminQuestionsPage() {
               </div>
             </div>
 
-            <button 
-              onClick={() => saveQuestionMutation.mutate()} 
-              disabled={!statement || !explanation || saveQuestionMutation.isPending} 
-              className="btn-primary w-full"
-            >
-              <Save className="w-5 h-5 mr-2" /> 
-              {editingId ? 'Enregistrer la nouvelle version' : 'Ajouter à la banque'}
+            {/* 👇 Upload de l'image */}
+            <div>
+              <label className="block text-sm font-medium mb-1">Illustration (optionnel)</label>
+              <div className="flex items-center gap-3">
+                <input type="file" accept="image/*" onChange={handleImageUpload} className="w-full p-2 border border-border-strong rounded-md" />
+                {isUploading && <p className="text-sm text-primary">Upload...</p>}
+              </div>
+              {illustrationUrl && (
+                <div className="mt-2 relative inline-block">
+                  <img src={illustrationUrl} alt="Illustration" className="h-24 object-contain rounded-md border" />
+                  <button onClick={() => setIllustrationUrl('')} className="absolute -top-2 -right-2 bg-red-500 text-white rounded-full p-1 text-xs">X</button>
+                </div>
+              )}
+            </div>
+
+            <button onClick={() => saveQuestionMutation.mutate()} disabled={!statement || !explanation || saveQuestionMutation.isPending} className="btn-primary w-full">
+              <Save className="w-5 h-5 mr-2" /> {editingId ? 'Enregistrer la nouvelle version' : 'Ajouter à la banque'}
             </button>
           </div>
 
-          {/* Liste des questions existantes */}
           <div className="bg-white rounded-xl border border-border p-6 shadow-sm">
             <h2 className="text-lg font-semibold text-ink mb-4">Questions enregistrées ({questions?.length || 0})</h2>
             {isLoadingQuestions ? (
@@ -250,15 +277,14 @@ export default function AdminQuestionsPage() {
               <ul className="divide-y divide-border">
                 {questions?.map((q) => (
                   <li key={q._id} className="py-3 flex justify-between items-start">
-                    <div>
-                      <p className="font-medium text-ink">{q.statement}</p>
-                      <p className="text-xs text-ink-soft mt-1">Type: {q.type} • Difficulté: {q.difficulty} • {q.options.length} propositions</p>
+                    <div className="flex items-center gap-4">
+                      {q.illustration && <img src={q.illustration} alt="" className="w-12 h-12 object-cover rounded border" />}
+                      <div>
+                        <p className="font-medium text-ink">{q.statement}</p>
+                        <p className="text-xs text-ink-soft mt-1">Type: {q.type} • Difficulté: {q.difficulty} • {q.options.length} propositions</p>
+                      </div>
                     </div>
-                    <button 
-                      onClick={() => startEdit(q)} 
-                      className="text-primary hover:bg-primary/5 p-2 rounded-md" 
-                      title="Modifier (crée une version archivée)"
-                    >
+                    <button onClick={() => startEdit(q)} className="text-primary hover:bg-primary/5 p-2 rounded-md" title="Modifier">
                       <Pencil className="w-4 h-4" />
                     </button>
                   </li>
@@ -298,26 +324,20 @@ export default function AdminQuestionsPage() {
             <div className="space-y-2">
               {questions?.map((q) => (
                 <label key={q._id} className="flex items-start gap-3 p-3 rounded-md border border-border hover:bg-surface-alt cursor-pointer">
-                  <input
-                    type="checkbox"
-                    checked={selectedQuestionIds.includes(q._id)}
-                    onChange={() => toggleQuestionSelection(q._id)}
-                    className="mt-1 w-4 h-4 text-primary"
-                  />
-                  <div>
-                    <p className="font-medium text-ink">{q.statement}</p>
-                    <p className="text-xs text-ink-soft">Difficulté: {q.difficulty}</p>
+                  <input type="checkbox" checked={selectedQuestionIds.includes(q._id)} onChange={() => toggleQuestionSelection(q._id)} className="mt-1 w-4 h-4 text-primary" />
+                  <div className="flex items-center gap-3">
+                    {q.illustration && <img src={q.illustration} alt="" className="w-8 h-8 object-cover rounded border" />}
+                    <div>
+                      <p className="font-medium text-ink">{q.statement}</p>
+                      <p className="text-xs text-ink-soft">Difficulté: {q.difficulty}</p>
+                    </div>
                   </div>
                 </label>
               ))}
             </div>
           </div>
 
-          <button
-            onClick={() => createQuizMutation.mutate()}
-            disabled={!quizTitle || selectedQuestionIds.length === 0 || createQuizMutation.isPending}
-            className="btn-primary w-full"
-          >
+          <button onClick={() => createQuizMutation.mutate()} disabled={!quizTitle || selectedQuestionIds.length === 0 || createQuizMutation.isPending} className="btn-primary w-full">
             <Save className="w-5 h-5 mr-2" /> Créer le QCM ({selectedQuestionIds.length} questions sélectionnées)
           </button>
         </div>
@@ -328,7 +348,6 @@ export default function AdminQuestionsPage() {
         <div className="space-y-6">
           <div className="bg-white rounded-xl border border-border p-6 shadow-sm space-y-4">
             <h2 className="text-lg font-semibold text-ink">Règles de tirage automatique</h2>
-            
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium mb-1">Titre du QCM *</label>
@@ -342,7 +361,6 @@ export default function AdminQuestionsPage() {
                 </select>
               </div>
             </div>
-
             <div className="grid grid-cols-3 gap-4">
               <div>
                 <label className="block text-sm font-medium mb-1">Nombre de questions *</label>
@@ -363,12 +381,7 @@ export default function AdminQuestionsPage() {
               </div>
             </div>
           </div>
-
-          <button
-            onClick={() => createQuizAutoMutation.mutate()}
-            disabled={!autoTitle || !autoQuestionCount || createQuizAutoMutation.isPending}
-            className="btn-primary w-full"
-          >
+          <button onClick={() => createQuizAutoMutation.mutate()} disabled={!autoTitle || !autoQuestionCount || createQuizAutoMutation.isPending} className="btn-primary w-full">
             <Sparkles className="w-5 h-5 mr-2" /> Générer le QCM automatiquement
           </button>
         </div>

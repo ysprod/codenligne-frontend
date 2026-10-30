@@ -12,6 +12,7 @@ interface SafeQuestion {
   statement: string;
   type: 'SINGLE' | 'MULTIPLE';
   options: string[];
+  illustration?: string; // 👈 Ajout de l'image
 }
 
 interface Attempt {
@@ -26,6 +27,7 @@ interface Correction {
   statement: string;
   type: 'SINGLE' | 'MULTIPLE';
   options: string[];
+  illustration?: string; // 👈 Ajout de l'image
   correctOptionIndex?: number;
   correctOptionIndexes?: number[];
   explanation?: string;
@@ -74,7 +76,6 @@ export default function QuizPassationPage() {
     onError: (error: any) => alert(`Erreur : ${error.response?.data?.message || error.message}`),
   });
 
-  // 👇 Gestion du compte à rebours
   useEffect(() => {
     if (!attempt?.expiresAt) return;
 
@@ -146,6 +147,14 @@ export default function QuizPassationPage() {
                   </div>
                   <h3 className="font-semibold text-ink">Question {idx + 1} : {q.statement}</h3>
                 </div>
+                
+                {/* 👇 Image dans la correction */}
+                {q.illustration && (
+                  <div className="mb-4 pl-9">
+                    <img src={q.illustration} alt="" className="max-h-48 object-contain rounded-md border" />
+                  </div>
+                )}
+
                 <div className="pl-9 space-y-2">
                   {q.options.map((opt, oIdx) => {
                     const isSelected = userAnswers.includes(oIdx);
@@ -228,6 +237,13 @@ export default function QuizPassationPage() {
 
       <div className="bg-white rounded-xl border border-border p-6 sm:p-8 shadow-sm">
         <h2 className="text-lg font-semibold text-ink mb-6">{currentQuestion.statement}</h2>
+
+        {/* 👇 Image dans la question */}
+        {currentQuestion.illustration && (
+          <div className="mb-6 rounded-lg overflow-hidden border border-border max-w-md mx-auto">
+            <img src={currentQuestion.illustration} alt="Illustration" className="w-full h-auto object-contain" />
+          </div>
+        )}
 
         <div className="space-y-3">
           {safeOptions.map((option, idx) => {
